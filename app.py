@@ -33,6 +33,19 @@ TREATMENTS = {
     "scorch":  "Ensure adequate watering. Avoid water stress.",
 }
 
+# ✅ FIX 1: Lowered threshold — real diseased leaves can score as low as 30–35%
+CONFIDENCE_THRESHOLD = 0.35
+
+# ✅ FIX 2: Blocklist of non-leaf classes the model was trained on
+# Add the exact lowercase class name(s) from your class_names.json that are NOT diseases
+NON_LEAF_CLASSES = {
+    "background_without_leaves",
+    "background without leaves",
+    "not a plant",
+    "not plant",
+    "invalid",
+}
+
 
 def format_class_name(raw: str) -> str:
     if "___" in raw:
@@ -41,7 +54,7 @@ def format_class_name(raw: str) -> str:
         disease_part = raw
     return disease_part.replace("_", " ").strip().title()
 
-# Uses raw class name for reliable keyword matching
+
 def get_treatment(raw: str) -> str:
     name_lower = raw.lower()
     for key, advice in TREATMENTS.items():
@@ -126,17 +139,15 @@ def home():
                     document.getElementById("confScore").innerText = "Confidence: " + data.confidence + "%";
                     document.getElementById("treatment").innerText = data.treatment;
 
-                    // ✅ FIX 2: Only show Top 3 if it's a valid leaf image
                     if (data.top3 && data.top3.length > 0) {
                         let html = "";
                         const medals = ["🥇","🥈","🥉"];
                         data.top3.forEach((x,i) => html += `<div class='top3-item'>${medals[i]} ${x.disease} — ${x.probability}%</div>`);
-                        top3Div.innerHTML   = html;
+                        top3Div.innerHTML       = html;
                         top3Label.style.display = "block";
                         diseaseEl.classList.remove("error");
                         resultDiv.classList.remove("error-result");
                     } else {
-                        // Non-leaf image — hide top3, show red styling
                         top3Div.innerHTML       = "";
                         top3Label.style.display = "none";
                         diseaseEl.classList.add("error");
@@ -152,31 +163,36 @@ def home():
     </html>
     """
 
-# ✅ FIX 3: Confidence threshold rejects non-leaf images
-CONFIDENCE_THRESHOLD = 0.60  # 60% minimum to be considered a valid leaf
 
 @app.post("/predict")
 async def predict(file: UploadFile = File(...)):
     img    = Image.open(io.BytesIO(await file.read())).convert("RGB")
     tensor = transform(img).unsqueeze(0)
+
     with torch.no_grad():
         probs = torch.softmax(model(tensor), dim=1)[0]
+
     top3_p, top3_i = torch.topk(probs, 3)
 
-    # Reject if confidence is too low (not a plant leaf)
-    if top3_p[0].item() < CONFIDENCE_THRESHOLD:
+    top_class_raw = CLASS_NAMES[top3_i[0].item()]
+    top_conf      = top3_p[0].item()
+
+    # ✅ FIX: Reject if low confidence OR if top prediction is a known non-leaf class
+    is_non_leaf_class = top_class_raw.lower().strip() in NON_LEAF_CLASSES
+    is_low_confidence = top_conf < CONFIDENCE_THRESHOLD
+
+    if is_low_confidence or is_non_leaf_class:
         return {
             "disease":    "❌ Not a Plant Leaf",
-            "confidence": round(top3_p[0].item() * 100, 2),
+            "confidence": round(top_conf * 100, 2),
             "treatment":  "⚠️ Please upload a clear photo of a plant leaf.",
-            "top3":       []   # Empty → JS hides the Top 3 section
+            "top3":       []
         }
 
-    raw_pred = CLASS_NAMES[top3_i[0].item()]
     return {
-        "disease":    format_class_name(raw_pred),       # e.g. "Apple Scab"
-        "confidence": round(top3_p[0].item() * 100, 2),
-        "treatment":  get_treatment(raw_pred),            # uses raw for correct lookup
+        "disease":    format_class_name(top_class_raw),
+        "confidence": round(top_conf * 100, 2),
+        "treatment":  get_treatment(top_class_raw),
         "top3": [
             {
                 "disease":     format_class_name(CLASS_NAMES[top3_i[i].item()]),
