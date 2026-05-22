@@ -33,11 +33,11 @@ TREATMENTS = {
     "scorch":  "Ensure adequate watering. Avoid water stress.",
 }
 
-# ✅ FIX 1: Lowered threshold — real diseased leaves can score as low as 30–35%
-CONFIDENCE_THRESHOLD = 0.35
+# Lowered to 0.20 — model confidence is genuinely low on real leaves
+# The real fix is retraining the model with more data
+CONFIDENCE_THRESHOLD = 0.20
 
-# ✅ FIX 2: Blocklist of non-leaf classes the model was trained on
-# Add the exact lowercase class name(s) from your class_names.json that are NOT diseases
+# Classes that should always be rejected even if confidence is high
 NON_LEAF_CLASSES = {
     "background_without_leaves",
     "background without leaves",
@@ -130,10 +130,10 @@ def home():
                     const res  = await fetch("/predict", { method: "POST", body: fd });
                     const data = await res.json();
 
-                    const resultDiv   = document.getElementById("result");
-                    const diseaseEl   = document.getElementById("diseaseName");
-                    const top3Label   = document.getElementById("top3Label");
-                    const top3Div     = document.getElementById("top3");
+                    const resultDiv = document.getElementById("result");
+                    const diseaseEl = document.getElementById("diseaseName");
+                    const top3Label = document.getElementById("top3Label");
+                    const top3Div   = document.getElementById("top3");
 
                     diseaseEl.innerText = data.disease;
                     document.getElementById("confScore").innerText = "Confidence: " + data.confidence + "%";
@@ -177,8 +177,17 @@ async def predict(file: UploadFile = File(...)):
     top_class_raw = CLASS_NAMES[top3_i[0].item()]
     top_conf      = top3_p[0].item()
 
-    # ✅ FIX: Reject if low confidence OR if top prediction is a known non-leaf class
+    # Print to Railway logs for debugging — remove after fixing
+    print("=" * 40)
+    print(f"TOP PREDICTION : {top_class_raw} → {top_conf*100:.2f}%")
+    for i in range(min(5, len(top3_i))):
+        print(f"  #{i+1}: {CLASS_NAMES[top3_i[i].item()]} → {top3_p[i].item()*100:.2f}%")
+    print("=" * 40)
+
+    # Reject if top class is a known non-leaf class (even with high confidence)
     is_non_leaf_class = top_class_raw.lower().strip() in NON_LEAF_CLASSES
+
+    # Reject if confidence is below threshold
     is_low_confidence = top_conf < CONFIDENCE_THRESHOLD
 
     if is_low_confidence or is_non_leaf_class:
