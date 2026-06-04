@@ -139,20 +139,20 @@ def home():
                     document.getElementById("confScore").innerText = "Confidence: " + data.confidence + "%";
                     document.getElementById("treatment").innerText = data.treatment;
 
-                    # if (data.top3 && data.top3.length > 0) {
-                    #     let html = "";
-                    #     const medals = ["🥇","🥈","🥉"];
-                    #     data.top3.forEach((x,i) => html += `<div class='top3-item'>${medals[i]} ${x.disease} — ${x.probability}%</div>`);
-                    #     top3Div.innerHTML       = html;
-                    #     top3Label.style.display = "block";
-                    #     diseaseEl.classList.remove("error");
-                    #     resultDiv.classList.remove("error-result");
-                    # } else {
-                    #     top3Div.innerHTML       = "";
-                    #     top3Label.style.display = "none";
-                    #     diseaseEl.classList.add("error");
-                    #     resultDiv.classList.add("error-result");
-                    # }
+                    if (data.top3 && data.top3.length > 0) {
+                        let html = "";
+                        const medals = ["🥇","🥈","🥉"];
+                        data.top3.forEach((x,i) => html += `<div class='top3-item'>${medals[i]} ${x.disease} — ${x.probability}%</div>`);
+                        top3Div.innerHTML       = html;
+                        top3Label.style.display = "block";
+                        diseaseEl.classList.remove("error");
+                        resultDiv.classList.remove("error-result");
+                    } else {
+                        top3Div.innerHTML       = "";
+                        top3Label.style.display = "none";
+                        diseaseEl.classList.add("error");
+                        resultDiv.classList.add("error-result");
+                    }
 
                     resultDiv.style.display = "block";
                 } catch(e) { alert("Error: " + e); }
